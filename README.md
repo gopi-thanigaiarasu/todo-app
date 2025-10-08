@@ -37,17 +37,19 @@ The backend will be running at `http://localhost:3000`.
 
 1. **Navigate to the frontend project directory:**
    ```bash
-   cd frontend/TodoApp
+   cd frontend/todos
    ```
 
-2. **Install dependencies:**
+2. Install dependencies
+
    ```bash
    npm install
    ```
 
-3. **Run the application on Android:**
+3. Start the app
+
    ```bash
-   npx react-native run-android
+   npx expo start
    ```
 
    The application will build and launch on your connected Android emulator or device.

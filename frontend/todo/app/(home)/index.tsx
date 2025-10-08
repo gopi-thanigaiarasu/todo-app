@@ -11,6 +11,7 @@ import {
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSnackbar } from '../components/SnackbarProvider';
@@ -22,6 +23,8 @@ const Home = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [editing, setEditing] = useState<{ id: number; title: string; description?: string } | null>(null);
 
   const getErrorMessage = (e: any, fallback: string) => e?.response?.data?.message || e?.message || fallback;
 
@@ -84,6 +87,31 @@ const Home = () => {
     }
   };
 
+  const handleStartEdit = (item: Todo) => {
+    setEditing({ id: item.id, title: item.title, description: item.description });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editing) return;
+    try {
+      const response = await updateTodo(editing.id, {
+        title: editing.title.trim(),
+        description: editing.description,
+      });
+      setTodos(todos.map((t) => (t.id === editing.id ? response.data : t)));
+      setEditing(null);
+    } catch (error) {
+      console.error('Error editing todo:', error);
+      show({ message: getErrorMessage(error, 'Failed to save changes'), type: 'error' });
+    }
+  };
+
+  const handleCancelEdit = () => setEditing(null);
+
+  const filteredTodos = todos.filter((t) =>
+    filter === 'all' ? true : filter === 'active' ? !t.completed : t.completed,
+  );
+
   const renderItem = ({ item }: { item: Todo }) => (
     <View style={styles.todoCard}>
       <Pressable
@@ -101,6 +129,13 @@ const Home = () => {
           </Text>
         ) : null}
       </TouchableOpacity>
+      <Pressable
+        onPress={() => handleStartEdit(item)}
+        style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+        android_ripple={{ color: '#e5e7eb' }}
+      >
+        <Text style={styles.secondaryButtonText}>Edit</Text>
+      </Pressable>
       <Pressable
         onPress={() => handleDeleteTodo(item.id)}
         style={({ pressed }) => [styles.dangerButton, pressed && styles.buttonPressed]}
@@ -142,12 +177,30 @@ const Home = () => {
             <Text style={styles.primaryButtonText}>Add Task</Text>
           </Pressable>
         </View>
+        <View style={styles.filterBar}>
+          {(['all', 'active', 'completed'] as const).map((f) => (
+            <Pressable
+              key={f}
+              onPress={() => setFilter(f)}
+              style={({ pressed }) => [
+                styles.filterButton,
+                filter === f && styles.filterButtonActive,
+                pressed && styles.buttonPressed,
+              ]}
+              android_ripple={{ color: '#e5e7eb' }}
+            >
+              <Text style={[styles.filterButtonText, filter === f && styles.filterButtonTextActive]}>
+                {f === 'all' ? 'All' : f === 'active' ? 'Active' : 'Completed'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
         <FlatList
-          data={todos}
+          data={filteredTodos}
           renderItem={renderItem}
           keyExtractor={(item) => item.id.toString()}
           style={styles.list}
-          contentContainerStyle={todos.length === 0 ? styles.listEmptyContent : styles.listContent}
+          contentContainerStyle={filteredTodos.length === 0 ? styles.listEmptyContent : styles.listContent}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -156,6 +209,52 @@ const Home = () => {
             </View>
           }
         />
+        <Modal
+          visible={!!editing}
+          animationType="slide"
+          transparent
+          onRequestClose={handleCancelEdit}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Edit Task</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Title"
+                value={editing?.title ?? ''}
+                onChangeText={(text) => setEditing((prev) => (prev ? { ...prev, title: text } : prev))}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Description (optional)"
+                value={editing?.description ?? ''}
+                onChangeText={(text) => setEditing((prev) => (prev ? { ...prev, description: text } : prev))}
+              />
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={handleCancelEdit}
+                  style={({ pressed }) => [styles.secondaryButton, styles.modalSecondaryButton, pressed && styles.buttonPressed]}
+                  android_ripple={{ color: '#e5e7eb' }}
+                >
+                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleSaveEdit}
+                  disabled={!editing || editing.title.trim().length === 0}
+                  style={({ pressed }) => [
+                    styles.primaryButton,
+                    styles.modalPrimaryButton,
+                    (!editing || editing.title.trim().length === 0) && styles.buttonDisabled,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  android_ripple={{ color: '#a5b4fc' }}
+                >
+                  <Text style={styles.primaryButtonText}>Save</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -290,6 +389,73 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.85,
+  },
+  secondaryButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginLeft: 12,
+  },
+  secondaryButtonText: {
+    color: '#111827',
+    fontWeight: '700',
+  },
+  filterBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  filterButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  filterButtonActive: {
+    backgroundColor: '#eef2ff',
+  },
+  filterButtonText: {
+    color: '#6b7280',
+    fontWeight: '700',
+  },
+  filterButtonTextActive: {
+    color: '#6366F1',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 12,
+    color: '#111827',
+  },
+  modalActions: {
+    marginTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  modalPrimaryButton: {
+    marginLeft: 12,
+  },
+  modalSecondaryButton: {
+    marginLeft: 0,
   },
 });
 
